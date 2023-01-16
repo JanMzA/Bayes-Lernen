@@ -84,7 +84,7 @@ def functions(type,value):
 
     if type == "1*x":
         return value
-    elif type =="x*x":
+    elif type == "x*x":
         return value * value
 
 
@@ -128,8 +128,121 @@ def funktionslernern(data,funktions_hypothesen):
     return h_ML
 
 
+def p_kj_gegeben_hi(k_j,h_i):
+
+    if h_i == k_j:
+        return 1
+    else:
+        return 0
 
 
+def optimaler_bayes(data):
+    """
+    h_map ist nicht zwingend die wahrscheinlichste Klassifikation
+    Nun gesucht die wahrscheinlichste Klassifikation v_j einer neuen Instanz x
+    k_OB = argmax k (sum(P(k_j|h_i)*P(h_i|D)))
+    :param data:
+    :return:
+    """
+    # mögliche Ausgänge
+    k_j = [True,False]
+
+    probabilities = []
+
+    for k in k_j:
+        classificator = 0
+        for i in range(len(data["h_i(x)"])):
+            erg = p_kj_gegeben_hi(k,data["h_i(x)"][i]) *  data["P(h_i|D)"][i]
+            classificator += erg
+        probabilities.append(classificator)
+
+    k_ob_idx = np.argmax(probabilities)
+    k_ob = k_j[k_ob_idx]
+
+    return k_ob
+
+
+def count(data,tuple1,tuple2):
+    # tuple = (col, ausprägung)
+
+    counts = 0
+    for idx in data.index:
+        if data.at[idx,tuple1[0]] == tuple1[1] and data.at[idx,tuple2[0]] == tuple2[1]:
+            counts += 1
+
+    erg = counts / data[tuple2[0]].to_list().count(tuple2[1])
+
+    return erg
+
+
+def naiver_bayes_classificator(data,new_instance):
+    """
+    gegeben:
+    Instanz x: Konjunktion von Attributen <a_1,...,a_n>
+    Endlichr Menge von Klassen V = {v1,...,v_m}
+    Menge klassifizierter Beispiele
+    gesucht:
+    v_map = argmax(P(a_1,...,a_n|v_j)*P(v_j))
+    P(a_1,...,a_n|v_j) = P(a_1|v_j)*...*P(a_n|v_j)
+    nehmen der Wahrscheinlichsten Klasse
+
+    wenn P(a_i|v_j) nicht gegeben dann schätzen durch
+    P(a_i|v_j) = (n_c + m*p) / (n+m)
+    n - Anzahl Attribute
+    m - Anzahl Klassen
+    n_c - Anzahl der Objekte in Klasse v_j mit Attribut a_i
+    p - 1/ Anzahl der Klassen
+
+    :return:
+    """
+
+
+    anzahl_data = len(data)
+    # Klassen V={Tennis?ja,Tennis?nein}
+    classes = list(set(data["Tennis?"].values)) # Umwandlung in Liste damit wieder reihnfolge gegebne ist für später identifizierung der max stelle
+
+
+    # Atrribute : attributausprägung
+    attributes = {col:set(data[col].values) for col in data.columns}
+    del attributes["Tennis?"]
+
+
+    #Berechnen der Wahrscheinlichkteit für Auftreten einer Klasse
+    p_vj = {}
+
+    for cl in classes:
+        p_vj[cl] = data["Tennis?"].to_list().count(cl) / anzahl_data
+
+
+    #Berechnen/Schätzen der Wahrscheinlichkeiten P(a_i|v_j)
+    p_ai_gegeben_vj = {}
+
+    for cls in attributes:
+        for atr in attributes[cls]:
+            for cl in classes:
+                event = atr + '|' + cl
+                prob = count(data,(cls,atr),("Tennis?",cl))
+                p_ai_gegeben_vj[event] = prob
+
+
+
+
+    p_classification = []
+    for cl in list(classes):
+        prob = p_vj[cl]
+        for atr in new_instance:
+            event = new_instance[atr] + '|' + cl
+            prob *= p_ai_gegeben_vj[event]
+        p_classification.append(prob)
+
+
+    argmax_idx = np.argmax(p_classification)
+    p_classification = classes[argmax_idx]
+
+
+    # ggf. Wahrscheinlichkeit normieren
+
+    return p_classification
 
 
 # h-Krebs, D- test positiv
@@ -140,10 +253,8 @@ data = {"P(h)": 0.008, "P(!h)": 0.992, "P(D|h)": 0.98,
 # Beobachtung neuer Patient, Test positiv. Hat der neue Patient Krebs?
 hypotheses = [["P(D|h)","P(h)"],["P(D|!h)","P(!h)"]]
 
-
-
-
 # möglich für Konzept lernen?
+# verwendet für naiver bayscher Klassifcator
 df = pd.DataFrame({
     "Vorhersage": ["sonnig", "sonnig", "bedeckt", "regnerisch", "regnerisch", "regnerisch",
                    "bedeckt", "sonnig", "sonnig", "regnerisch", "sonnig", "bedeckt",
@@ -158,13 +269,17 @@ df = pd.DataFrame({
                 "ja", "ja", "ja", "ja", "ja", "nein"]
 })
 
+
+neue_instanz = {"Vorhersage": "sonnig", "Temperatur": "kalt", "Luftfeutigkeit":"hoch",
+                "Wind":"stark"}
+
 # Hypothesen für Tennis?
 hypotheses = pd.DataFrame({
-    "Vorhersage":  ["sonnig","regnerisch"],
-    "Temperatur":  ["warm","kalt"],
-    "Luftfeutigkeit": ["normal","hoch"],
-    "Wind":  ["schwach","stark"],
-    "Tennis?": ["ja","nein"]
+    "Vorhersage":  ["sonnig", "regnerisch"],
+    "Temperatur":  ["warm", "kalt"],
+    "Luftfeutigkeit": ["normal", "hoch"],
+    "Wind":  ["schwach", "stark"],
+    "Tennis?": ["ja", "nein"]
 })
 
 # für funktionslernen
@@ -174,9 +289,6 @@ df = pd.DataFrame({
     "y":[0.9,1.4,2.1,2.5,3,3.6,4.2,0.7,0,-0.6,-1,-1.4,-2,-2.4,-3.1,-4]
 })
 
-#data = np.array([[1,0.9],[1.2,1.4],[2,2.1],[2.5,2.5],[3.1,3],[3.7,3.6],[4,4.2],[0.5,0.7],
-#                [0,0],[-0.4,-0.6],[-1.1,-1],[-1.7,-1.4],[-2.3,-2],[-2.6,-2.4],[-3.3,-3.1],
-#                [-3.9,-4]])
+# für optimaler Bayes
+data = {"P(h_i|D)": [0.4, 0.3, 0.3], "h_i(x)":[True, False, False]}
 
-
-print(funktionslernern(df,["1*x","x*x"]))
